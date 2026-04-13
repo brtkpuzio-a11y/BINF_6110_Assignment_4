@@ -207,10 +207,102 @@ Figure 27: Line plot of mean log-normalised Krt13 expression in RM cells across 
 
 ## Discussion
 
+### Overview of Findings
 
+This study applied a single-cell RNA sequencing analysis pipeline to a subset of the Kazer et al. (2024) [5] primary IAV infection dataset, profiling 97,747 murine nasal mucosal cells across three anatomical regions and five timepoints. Twenty transcriptionally distinct clusters were identified following Harmony-integrated dimensionality reduction and graph-based clustering. Two complementary annotation strategies were employed: a manual KNIIFE module score approach identifying clusters 1 and 18 as the previously described Krt13+ nasal immune-interacting floor epithelial population [5], and automated SingleR annotation against the ImmGen reference [12] assigning 20 cell type labels with high confidence. Focused differential expression and pathway enrichment analyses revealed a strong interferon-dominated antiviral transcriptional programme in NKT cells at early infection (D05), a metabolic and chromatin-level response in neutrophils at the resolution phase (D14), and a coordinated innate immune activation state in RM NK cells and macrophages at peak infection (D08). Together, these findings recapitulate key features of the mucosal antiviral response described in the source atlas and provide additional mechanistic detail at the pathway level.
 
+### KNIIFE Cell Identification and Epithelial Immune Crosstalk
+
+The identification of KNIIFE cells via module scoring replicated the defining transcriptional characteristics of the population described by Kazer et al. [5], with both KNIIFE-positive clusters showing enrichment of all four canonical markers (Krt13, Il1a, Cd274, Cxcl16). The co-expression of PD-L1 (Cd274) and the chemokine CXCL16 in an epithelial population is biologically notable. PD-L1 upregulation during viral infection is well established as a mechanism for attenuating T cell-mediated immunopathology, limiting collateral tissue damage in the inflamed mucosa [25]. The co-expression of CXCL16, the sole ligand for CXCR6, alongside PD-L1 places KNIIFE cells at the centre of a potential epithelial niche that both recruits and tolerises CXCR6+ tissue-resident CD8+ T cells (TRM) following viral clearance [5]. This dual function would be consistent with the emerging concept of "niche epithelial cells" that provide both positional retention signals and co-inhibitory regulation to sustain long-lived mucosal T cell memory without immunopathology. However, several caveats apply to the annotation approach used here. The module score-based classification assigns KNIIFE status at the cluster level rather than per cell, meaning that heterogeneity within clusters 1 and 18 is obscured. The mean Krt13 expression kinetics in RM cells (Figure 27) showed a modest peak at D05 (mean = 0.034) followed by a decline at D08 and D14, rather than the pronounced D14 expansion reported by Kazer et al. [5]. This discrepancy likely reflects the broad cluster-level annotation used here, which conflates KNIIFE cells with other Krt13-expressing epithelial populations rather than isolating true KNIIFE cells at single-cell resolution. A sub-clustering approach applied specifically to the epithelial compartment, or the use of the original Kazer et al. atlas as a SingleR reference for label transfer, would provide finer-grained KNIIFE identification and more faithfully reproduce the published temporal dynamics.
+
+### NKT Cell Antiviral Activation at Early Infection
+
+Cluster 6 NKT cells mounted the most transcriptionally active response observed in this analysis, with 1,472 genes significantly upregulated at D05 relative to naive. The response was characterised by ISG induction, with Oasl1 (log2FC = 9.27), Rsad2 (8.67), Ifit1 (6.54), and Isg15 (4.44) among the most strongly upregulated genes. GSEA confirmed significant enrichment of both HALLMARK_INTERFERON_ALPHA_RESPONSE and HALLMARK_INTERFERON_GAMMA_RESPONSE (NES = 2.71 each), with OxPhos suppression (NES = -3.08) indicating a concurrent metabolic shift. This pattern is consistent with the well-documented Warburg-like metabolic reprogramming that accompanies innate immune cell activation, in which oxidative phosphorylation is downregulated in favour of glycolysis to meet the rapid biosynthetic and energetic demands of effector function [26]. The role of ISG15 in T cell and NKT cell antiviral immunity is increasingly appreciated: beyond its direct antiviral effects via protein ISGylation, ISG15 can act as a cytokine that enhances NK cell IFN-gamma production [27]. Similarly, Rsad2 has established antiviral activity through disruption of viral RNA polymerase function and enhancement of TLR7/9-mediated type I interferon production [28]. The induction of these effector ISGs in NKT cells at D05, coinciding with peak early viral replication, positions this population as a key early contributor to the antiviral innate response at the nasal mucosa. NKT cells have previously been shown to play a protective role during pulmonary IAV infection by limiting viral-induced immune suppression [29]. ORA against GO-BP terms further revealed enrichment of cytoplasmic translation and ribosome biogenesis pathways in cluster 6 constitutive markers, consistent with the high translational activity expected of an actively proliferating and effector-committed lymphocyte population.
+
+### Neutrophil Transcriptional Reprogramming at Infection Resolution
+
+In contrast to the dramatic ISG-dominated response of NKT cells, cluster 5 neutrophils displayed a comparatively subtle transcriptional shift between D14 and naive baseline, with 117 genes upregulated and 152 downregulated. The constitutive marker profile of cluster 5 was strongly consistent with a neutrophil identity across all timepoints, with canonical markers including Retnlg, Cxcr2, Mmp8, Mmp9, S100a8, and S100a9 all highly expressed and stable [24]. Neutrophil recruitment to the nasal mucosa during IAV infection is driven by CXCR2 signalling in response to chemokines including CXCL1 and CXCL5, and these cells contribute to early viral clearance through phagocytosis and degranulation [30]. At D14, GSEA revealed suppression of HALLMARK_OXIDATIVE_PHOSPHORYLATION (NES = -2.96) and HALLMARK_MYC_TARGETS_V1 (NES = -2.33), suggesting that late-infection neutrophils have reduced metabolic and proliferative activity compared to the naive state. Modest activation of TNFα/NF-κB signalling (NES = 1.92) at D14 indicates residual pro-inflammatory signalling, consistent with an ongoing but waning inflammatory resolution response. The downregulation of chromatin-associated proteins Hmgn1 and Hmgn3 at D14 (log2FC = -1.33 and -1.31 respectively) is of particular interest, as HMGN family proteins modulate nucleosome structure and regulate the accessibility of chromatin to transcription factors. Their downregulation may reflect broader chromatin compaction and transcriptional quiescence in neutrophils transitioning out of an active inflammatory state during the resolution of infection.
+
+### Innate Immune Activation of RM NK Cells and Macrophages at Peak Infection
+
+The DE analysis of RM NK cells and macrophages at D08 versus naive revealed a coordinated innate antiviral activation state, with 1,226 significantly upregulated genes dominated by ISGs and cytokines. The most strongly upregulated gene was Cxcl9 (log2FC = 8.08), followed by Gbp2 (5.16), Ifi205 (5.14), Rsad2 (4.49), and Cd274 (4.21). CXCL9 and CXCL10, both IFN-gamma-inducible chemokines acting through CXCR3, are critical for the recruitment of effector and memory CD8+ T cells to sites of viral infection [31]. Their strong upregulation in innate cells at D08 suggests that the NK cell and macrophage compartment plays an active orchestrating role in lymphocyte recruitment during peak infection, creating a chemokine gradient that draws cytotoxic T cells into the nasal mucosa. Suppression of HALLMARK_OXIDATIVE_PHOSPHORYLATION (NES = -1.94) alongside activation of IFN-alpha (NES = 2.54) and IFN-gamma (NES = 2.57) responses recapitulates the same metabolic reprogramming observed in NKT cells [26], suggesting this is a shared feature of innate immune activation across cell types during acute IAV infection. The downregulation of homeostatic genes including Omp (olfactory marker protein, log2FC = -2.58) and S100a5 (-3.73) in NK cells and macrophages at D08 may reflect bystander transcriptional suppression driven by the dominance of the interferon response, or the displacement of tissue-resident homeostatic cell states by newly recruited inflammatory cells.
+
+### Cell Type Composition Dynamics Across Infection
+
+The composition analysis revealed the expected pattern of immune infiltration during IAV infection, with the relative abundance of monocytes, macrophages, NKT cells, and neutrophils increasing within the RM between naive and peak infection (D02-D08), followed by partial normalisation towards baseline composition by D14. The epithelial and fibroblast compartments, which dominated the naive RM (29.1% and 21.3% respectively), were proportionally reduced during active infection but recovered by the resolution phase, consistent with mucosal restitution following viral clearance. At D08, the cross-tissue composition analysis showed broadly similar immune infiltration patterns across LNG, OM, and RM, with macrophages proportionally more abundant in LNG (12.9%) than in other regions, which may reflect the greater degree of IAV replication and tissue damage in the lung-proximal compartment. These compositional shifts are consistent with published reports of dynamic innate immune recruitment and subsequent resolution in the respiratory mucosa following IAV infection [2]. The use of SingleR labels for compositional quantification, while providing broad cell type estimates, may underestimate fine-grained compositional changes in closely related populations due to the resolution limitations of main-level ImmGen annotation.
+
+### Limitations and Future Directions
+
+Several limitations should be acknowledged. First, the use of the Wilcoxon rank-sum test for differential expression, while appropriate given the absence of sufficient biological replicates for pseudobulk analysis, inflates the effective degrees of freedom by treating each cell as an independent observation. This can lead to elevated false positive rates, and the highly significant adjusted p-values observed should be interpreted with caution [15]. The biological plausibility of the top DE genes and their pathway-level consistency with the GSEA results provides additional confidence in the major findings, but the precise quantitative thresholds reported should not be taken at face value without replication. Second, the KNIIFE annotation approach used here operates at cluster rather than single-cell resolution, limiting the ability to track individual KNIIFE cells across timepoints or to resolve heterogeneity within the population. Future analyses should employ reference-based label transfer from the full Kazer et al. atlas to obtain per-cell KNIIFE probabilities. Third, this analysis is cross-sectional and cannot distinguish whether transcriptional changes between timepoints reflect the same cells changing state or shifts in the composition of recruited cell populations. Finally, without spatial transcriptomic data, the precise tissue localisation of identified populations and their physical proximity to other cell types cannot be determined, limiting the ability to make firm conclusions about direct cell-cell interactions such as the proposed KNIIFE-TRM niche. Future work integrating single-cell and spatial transcriptomics would be valuable for resolving these questions.
+
+### Conclusions
+
+This analysis successfully recapitulated the major cell type composition of the murine nasal mucosa, identified KNIIFE cells as a transcriptionally distinct epithelial population co-expressing immunomodulatory genes, and characterised the antiviral transcriptional responses of three distinct immune populations across primary IAV infection. The interferon-dominated activation of NKT cells at D05, the coordinated CXCL9/CXCL10-driven chemokine response of RM innate cells at D08, and the metabolic and chromatin-level reprogramming of neutrophils at D14 collectively describe a temporally organised mucosal antiviral response in which distinct cell populations contribute sequentially to viral control, immune recruitment, and inflammatory resolution. These findings are consistent with and extend the cellular atlas published by Kazer et al. [5], and highlight the utility of scRNA-seq combined with GSEA-level pathway analysis for resolving the biology of complex mucosal tissues during infection.
 
 ## References
+
+[1] World Health Organization. Influenza (Seasonal). WHO Fact Sheet. 2023. https://www.who.int/news-room/fact-sheets/detail/influenza-(seasonal)
+
+[2] Iwasaki A, Pillai PS. Innate immunity to influenza virus infection. Nat Rev Immunol. 2014;14(5):315-328. doi:10.1038/nri3665
+
+[3] Teijaro JR, et al. Cutting edge: Tissue-retentive lung memory CD4 T cells mediate optimal protection to respiratory virus infection. J Immunol. 2011;187(11):5510-5514. doi:10.4049/jimmunol.1102243
+
+[4] Godfrey DI, Kronenberg M. Going both ways: immune regulation via CD1d-dependent NKT cells. J Clin Invest. 2004;114(10):1379-1388. doi:10.1172/JCI23594
+
+[5] Kazer SW, et al. A cellular census of the murine nasal mucosa during primary and secondary influenza A virus infection. bioRxiv. 2024. PMC11324402. doi:10.1101/2024.01.22.576714
+
+[6] Haque A, et al. A practical guide to single-cell RNA-sequencing for biomedical research and clinical applications. Genome Med. 2017;9(1):75. doi:10.1186/s13073-017-0467-4
+
+[7] Hao Y, et al. Integrated analysis of multimodal single-cell data. Cell. 2021;184(13):3573-3587.e29. doi:10.1016/j.cell.2021.04.048
+
+[8] Korsunsky I, et al. Fast, sensitive and accurate integration of single-cell data with Harmony. Nat Methods. 2019;16(12):1289-1296. doi:10.1038/s41592-019-0619-0
+
+[9] Polanski K, et al. BBKNN: fast batch alignment of single cell transcriptomes. Bioinformatics. 2020;36(3):964-965. doi:10.1093/bioinformatics/btz625
+
+[10] Hie B, et al. Efficient integration of heterogeneous single-cell transcriptomes using Scanorama. Nat Biotechnol. 2019;37(6):685-691. doi:10.1038/s41587-019-0113-3
+
+[11] Aran D, et al. Reference-based analysis of lung single-cell sequencing reveals a transitional profibrotic macrophage. Nat Immunol. 2019;20(2):163-172. doi:10.1038/s41590-018-0276-y
+
+[12] Heng TSP, Painter MW; Immunological Genome Project Consortium. The Immunological Genome Project: networks of gene expression in immune cells. Nat Immunol. 2008;9(10):1091-1094. doi:10.1038/ni1008-1091
+
+[13] Love MI, Huber W, Anders S. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biol. 2014;15(12):550. doi:10.1186/s13059-014-0550-8
+
+[14] Robinson MD, McCarthy DJ, Smyth GK. edgeR: a Bioconductor package for differential expression analysis of digital gene expression data. Bioinformatics. 2010;26(1):139-140. doi:10.1093/bioinformatics/btp616
+
+[15] Squair JW, et al. Confronting false discoveries in single-cell differential expression. Nat Commun. 2021;12(1):5692. doi:10.1038/s41467-021-25960-2
+
+[16] Subramanian A, et al. Gene set enrichment analysis: a knowledge-based approach for interpreting genome-wide expression profiles. Proc Natl Acad Sci USA. 2005;102(43):15545-15550. doi:10.1073/pnas.0506580102
+
+[17] Liberzon A, et al. The Molecular Signatures Database Hallmark Gene Set Collection. Cell Syst. 2015;1(6):417-425. doi:10.1016/j.cels.2015.12.004
+
+[18] Gene Ontology Consortium. The Gene Ontology resource: enriching a GOld mine. Nucleic Acids Res. 2021;49(D1):D325-D334. doi:10.1093/nar/gkaa1113
+
+[19] R Core Team. R: A Language and Environment for Statistical Computing. R Foundation for Statistical Computing, Vienna, Austria. 2023. https://www.R-project.org/
+
+[20] McDavid A, et al. Data exploration, quality control and testing in single-cell qPCR-based gene expression experiments. Bioinformatics. 2013;29(4):461-467. doi:10.1093/bioinformatics/bts714
+
+[21] Yu G, et al. clusterProfiler: an R Package for Comparing Biological Themes Among Gene Clusters. OMICS. 2012;16(5):284-287. doi:10.1089/omi.2011.0118
+
+[22] Dolgalev I. msigdbr: MSigDB Gene Sets for Multiple Organisms in a Tidy Data Format. R package version 7.5.1. 2022. https://CRAN.R-project.org/package=msigdbr
+
+[23] Wickham H. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York. 2016. ISBN 978-3-319-24277-4
+
+[24] Kolaczkowska E, Kubes P. Neutrophil recruitment and function in health and inflammation. Nat Rev Immunol. 2013;13(3):159-175. doi:10.1038/nri3399
+
+[25] Chen L, Flies DB. Molecular mechanisms of T cell co-inhibition and co-stimulation. Nat Rev Immunol. 2013;13(4):227-242. doi:10.1038/nri3405
+
+[26] O'Neill LAJ, Kishton RJ, Rathmell J. A guide to immunometabolism for immunologists. Nat Rev Immunol. 2016;16(9):553-565. doi:10.1038/nri.2016.70
+
+[27] Skaug B, Chen ZJ. Emerging role of ISG15 in antiviral immunity. Cell. 2010;143(2):187-190. doi:10.1016/j.cell.2010.09.033
+
+[28] Saitoh T, et al. Antiviral protein Viperin promotes Toll-like receptor 7- and Toll-like receptor 9-mediated type I interferon production in plasmacytoid dendritic cells. Immunity. 2011;34(3):352-363. doi:10.1016/j.immuni.2011.03.002
+
+[29] De Santo C, et al. Invariant NKT cells reduce the immunosuppressive activity of influenza A virus-induced myeloid-derived suppressor cells in mice and humans. J Clin Invest. 2008;118(12):4036-4048. doi:10.1172/JCI36264
+
+[30] Tate MD, et al. Neutrophils ameliorate lung injury and the development of severe disease during influenza infection. J Immunol. 2009;183(12):7441-7448. doi:10.4049/jimmunol.0902497
+
+[31] Groom JR, Luster AD. CXCR3 ligands: redundant, collaborative and antagonistic functions. Immunol Cell Biol. 2011;89(2):207-215. doi:10.1038/icb.2010.158
+
 
 
 
