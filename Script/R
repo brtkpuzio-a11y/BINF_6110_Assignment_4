@@ -1,1 +1,694 @@
-Script placeholder
+library(Seurat)
+library(harmony)
+library(DESeq2)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(enrichplot)
+library(msigdbr)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(tidyr)
+library(pheatmap)
+library(ggrepel)
+library(stringr)
+library(SingleR)
+library(celldex)
+
+set.seed(42)
+
+# 1.  DATA LOADING
+
+seurat_obj <- readRDS("seurat_ass4.rds")
+
+seurat_obj$timepoint <- sub("^([^_]+)_.*", "\\1", seurat_obj$orig.ident)
+seurat_obj$region <- sub("^[^_]+_([^.]+)\\..*", "\\1", seurat_obj$orig.ident)
+
+seurat_obj$timepoint <- factor(
+  seurat_obj$timepoint,
+  levels = intersect(c("Naive", "D02", "D05", "D08", "D14"), unique(seurat_obj$timepoint))
+)
+
+cat("Loaded", ncol(seurat_obj), "cells and", nrow(seurat_obj), "genes.\n")
+
+
+# 2.  QUALITY CONTROL
+
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^mt-")
+
+ggsave("qc_violin_prefilt.pdf",
+  VlnPlot(seurat_obj,
+    features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
+    ncol = 3, pt.size = 0, group.by = "orig.ident"
+  ) +
+    plot_annotation(title = "QC metrics before filtering"),
+  width = 14, height = 5
+)
+
+print(FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "percent.mt"))
+
+seurat_obj <- subset(seurat_obj,
+  subset = nFeature_RNA > 500 & nFeature_RNA < 2500 &
+    nCount_RNA > 750 & nCount_RNA < 6000 &
+    percent.mt < 8
+)
+
+cat("After QC:", ncol(seurat_obj), "cells remain.\n")
+
+print(FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "percent.mt"))
+
+ggsave("qc_violin_postfilt.pdf",
+  VlnPlot(seurat_obj,
+    features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
+    ncol = 3, pt.size = 0, group.by = "orig.ident"
+  ) +
+    plot_annotation(title = "QC metrics after filtering"),
+  width = 14, height = 5
+)
+
+
+# 3.  NORMALISATION, CELL CYCLE REGRESSION & VARIABLE FEATURES
+
+seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize")
+
+seurat_obj <- CellCycleScoring(
+  seurat_obj,
+  s.features   = str_to_title(cc.genes$s.genes),
+  g2m.features = str_to_title(cc.genes$g2m.genes),
+  set.ident    = FALSE
+)
+
+seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 3000)
+
+seurat_obj <- ScaleData(seurat_obj,
+  vars.to.regress = c("percent.mt", "S.Score", "G2M.Score")
+)
+
+
+# 4.  PCA & ELBOW PLOT
+
+seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(seurat_obj), verbose = TRUE)
+
+N_PCS <- 14
+
+ggsave("elbow_plot.pdf",
+  ElbowPlot(seurat_obj, ndims = 50) +
+    ggtitle("Elbow plot – selecting number of PCs") +
+    geom_vline(xintercept = N_PCS, linetype = "dashed", colour = "red") +
+    annotate("text",
+      x = 32, y = 3, hjust = 0, colour = "red",
+      label = paste("Selected:", N_PCS, "PCs")
+    ),
+  width = 7, height = 4
+)
+
+
+# 5.  HARMONY INTEGRATION
+
+seurat_obj <- RunHarmony(
+  seurat_obj,
+  group.by.vars    = "orig.ident",
+  dims.use         = 1:N_PCS,
+  assay.use        = "RNA",
+  plot_convergence = FALSE,
+  verbose          = TRUE
+)
+
+
+# 6.  CLUSTERING + UMAP
+
+seurat_obj <- FindNeighbors(seurat_obj, reduction = "harmony", dims = 1:N_PCS)
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.3, cluster.name = "seurat_clusters")
+seurat_obj <- RunUMAP(seurat_obj,
+  reduction = "harmony", dims = 1:N_PCS,
+  n.neighbors = 30, reduction.name = "umap", verbose = TRUE
+)
+
+# UMAPs coloured by cluster, tissue, timepoint, and sample
+ggsave("umap_clusters.pdf",
+  DimPlot(seurat_obj, reduction = "umap", label = TRUE, repel = TRUE, pt.size = 0.3) +
+    ggtitle("UMAP – Seurat clusters") + NoLegend(),
+  width = 8, height = 7
+)
+
+ggsave("umap_region.pdf",
+  DimPlot(seurat_obj,
+    reduction = "umap", group.by = "organ_custom", pt.size = 0.3,
+    cols = c("OM" = "#FF0000", "RM" = "#0099FF", "LNG" = "#00CC00")
+  ) +
+    ggtitle("UMAP – Tissue region"),
+  width = 8, height = 6
+)
+
+ggsave("umap_timepoint.pdf",
+  DimPlot(seurat_obj,
+    reduction = "umap", group.by = "timepoint", pt.size = 0.3,
+    cols = c(
+      "Naive" = "#E6E6E6", "D02" = "#FF0000", "D05" = "#FF9900",
+      "D08" = "#FFFF00", "D14" = "#00CC00"
+    )
+  ) +
+    ggtitle("UMAP – Timepoint"),
+  width = 8, height = 6
+)
+
+ggsave("umap_batch_check.pdf",
+  DimPlot(seurat_obj,
+    reduction = "umap", group.by = "orig.ident", pt.size = 0.5,
+    cols = rainbow(length(unique(seurat_obj$orig.ident))), shuffle = TRUE
+  ) +
+    ggtitle("UMAP – Sample (batch check)") + theme(legend.position = "none"),
+  width = 8, height = 6
+)
+
+# Dot plot of canonical marker genes across all clusters
+Idents(seurat_obj) <- seurat_obj$seurat_clusters
+
+ggsave("dotplot_markers_by_cluster.pdf",
+  DotPlot(seurat_obj,
+    cols = c("lightgrey", "#67000D"), dot.scale = 6,
+    features = c(
+      "Krt13", "Epcam", "Pigr",
+      "Nkg7", "Gzmb", "Prf1",
+      "C1qa", "Csf1r", "Adgre1",
+      "Ly6c2", "S100a8",
+      "Ms4a1", "Cd79a",
+      "Cd3e", "Cd8a",
+      "Ifitm3", "Isg15", "Oas1a"
+    )
+  ) +
+    RotatedAxis() +
+    labs(title = "Marker gene expression across Seurat clusters", x = NULL, y = "Cluster") +
+    theme(
+      axis.text.x = element_text(size = 9, face = "italic"),
+      axis.text.y = element_text(size = 9),
+      plot.title = element_text(size = 12, face = "bold")
+    ),
+  width = 14, height = 7
+)
+
+
+# 7.  MANUAL ANNOTATION — KNIIFE
+
+# Module score from four KNIIFE markers; clusters >= 0.20 labelled KNIIFE
+seurat_obj <- AddModuleScore(seurat_obj,
+  seed = 42, name = "celltype_score",
+  features = list("KNIIFE" = c("Krt13", "Il1a", "Cd274", "Cxcl16"))
+)
+
+Idents(seurat_obj) <- seurat_obj$seurat_clusters
+
+cluster_scores <- tapply(seurat_obj$celltype_score1, Idents(seurat_obj), mean)
+cluster_labels <- ifelse(cluster_scores >= 0.20, "KNIIFE", "Other")
+names(cluster_labels) <- names(cluster_scores)
+
+print(data.frame(
+  Cluster = names(cluster_labels), Cell_Type = cluster_labels,
+  Score = round(cluster_scores, 4)
+))
+
+seurat_obj$cell_type <- cluster_labels[as.character(seurat_obj$seurat_clusters)]
+cat("\n── Cell type composition ──\n")
+print(table(seurat_obj$cell_type))
+
+Idents(seurat_obj) <- seurat_obj$cell_type
+
+ggsave("umap_annotated_KNIIFE.pdf",
+  DimPlot(seurat_obj,
+    reduction = "umap", label = TRUE, repel = TRUE,
+    label.size = 3, pt.size = 0.3,
+    cols = c("KNIIFE" = "#FF7F00", "Other" = "#CCCCCC")
+  ) +
+    ggtitle("UMAP – KNIIFE vs Other"),
+  width = 13, height = 9
+)
+
+
+# 8.  SINGLER ANNOTATION
+
+# Automated annotation against ImmGen reference
+pred <- SingleR(
+  test      = GetAssayData(seurat_obj, assay = "RNA", layer = "data"),
+  ref       = celldex::ImmGenData(),
+  labels    = celldex::ImmGenData()$label.main,
+  de.method = "wilcox"
+)
+
+seurat_obj$singler_label <- pred$labels
+seurat_obj$singler_pruned <- pred$pruned.labels
+
+cat("\n── SingleR label composition ──\n")
+print(table(seurat_obj$singler_label))
+cat("\nLow-confidence cells:", sum(is.na(seurat_obj$singler_pruned)), "\n")
+
+Idents(seurat_obj) <- seurat_obj$singler_pruned
+
+ggsave("umap_annotated_singler.pdf",
+  DimPlot(seurat_obj,
+    reduction = "umap", label = TRUE, repel = TRUE,
+    label.size = 3, pt.size = 0.3, na.value = "lightgrey"
+  ) +
+    ggtitle("UMAP – SingleR annotation (ImmGenData)"),
+  width = 13, height = 9
+)
+
+pdf("singler_score_heatmap.pdf", width = 14, height = 8)
+plotScoreHeatmap(pred)
+dev.off()
+pdf("singler_delta_distribution.pdf", width = 10, height = 6)
+plotDeltaDistribution(pred)
+dev.off()
+
+
+# 9.  VIOLIN PLOTS
+
+rm_obj <- subset(seurat_obj, subset = organ_custom == "RM")
+Idents(seurat_obj) <- seurat_obj$cell_type
+
+# KNIIFE markers vs Other
+ggsave("violin_KNIIFE_markers.pdf",
+  VlnPlot(seurat_obj,
+    pt.size = 0, group.by = "cell_type", ncol = 2,
+    features = c("Krt13", "Cd274", "Cxcl16", "Il1a")
+  ) +
+    plot_annotation(title = "KNIIFE marker expression – KNIIFE vs Other"),
+  width = 10, height = 8
+)
+
+# ISG expression by cell type
+ggsave("violin_ISG_by_celltype.pdf",
+  VlnPlot(seurat_obj,
+    pt.size = 0, group.by = "cell_type", ncol = 2,
+    features = c("Ifitm3", "Isg15", "Oas1a", "Rsad2")
+  ) +
+    plot_annotation(title = "Interferon-stimulated gene expression by cell type"),
+  width = 12, height = 8
+)
+
+
+# 10.  FEATURE PLOTS
+
+# Shared minimal theme for all feature plots
+fp_theme <- theme(
+  plot.title = element_text(size = 10, face = "italic"),
+  axis.title = element_blank(), axis.text = element_blank(),
+  axis.ticks = element_blank(), legend.position = "none"
+)
+
+# Helper: add legend to first panel only
+add_legend <- function(p) {
+  p[[1]] <- p[[1]] + theme(
+    legend.position = "right",
+    legend.key.height = unit(0.8, "cm"), legend.key.width = unit(0.3, "cm"),
+    legend.text = element_text(size = 7), legend.title = element_blank()
+  )
+  p
+}
+
+ggsave("featureplot_KNIIFE_markers.pdf",
+  add_legend(
+    FeaturePlot(seurat_obj,
+      reduction = "umap", ncol = 3, pt.size = 0.4, order = TRUE,
+      features = c("Pigr", "Krt13", "Krt5", "Cd274", "Epcam"),
+      cols = c("grey90", "#67000D")
+    ) &
+      fp_theme & theme(panel.background = element_rect(fill = "white", color = NA))
+  ) + plot_annotation(
+    title = "Feature plots – KNIIFE & epithelial markers",
+    subtitle = "Expression overlaid on UMAP; grey = not detected",
+    theme = theme(
+      plot.title = element_text(size = 13, face = "bold"),
+      plot.subtitle = element_text(size = 9, color = "grey40")
+    )
+  ),
+  width = 12, height = 8
+)
+
+ggsave("featureplot_immune_markers.pdf",
+  add_legend(
+    FeaturePlot(seurat_obj,
+      reduction = "umap", ncol = 2, pt.size = 0.3, order = TRUE,
+      features = c("Nkg7", "C1qa", "Ly6c2", "Ms4a1"),
+      cols = c("grey90", "#4D004B")
+    ) & fp_theme
+  ) + plot_annotation(
+    title = "Feature plots – Immune cell markers",
+    subtitle = "NK, Macrophage, Monocyte, B cell",
+    theme = theme(
+      plot.title = element_text(size = 13, face = "bold"),
+      plot.subtitle = element_text(size = 9, color = "grey40")
+    )
+  ),
+  width = 10, height = 8
+)
+
+ggsave("featureplot_ISG_markers.pdf",
+  (FeaturePlot(seurat_obj,
+    reduction = "umap", ncol = 2, pt.size = 0.2, order = TRUE,
+    features = c("Ifitm3", "Isg15", "Oas1a", "Rsad2"),
+    cols = c("grey90", "#4D004B")
+  ) & fp_theme) +
+    plot_annotation(
+      title    = "Feature plots – Interferon-stimulated genes",
+      subtitle = "Broadly induced across cell types during IAV infection",
+      theme    = theme(plot.title = element_text(size = 13, face = "bold"))
+    ),
+  width = 10, height = 8
+)
+
+# Epcam split Naive vs D14
+ggsave("featureplot_Epcam_split_naive_D14.pdf",
+  (FeaturePlot(subset(seurat_obj, subset = timepoint %in% c("Naive", "D14")),
+    features = "Epcam", split.by = "timepoint", reduction = "umap",
+    pt.size = 0.3, order = TRUE, cols = c("grey90", "#D73027")
+  ) &
+    fp_theme) +
+    plot_annotation(
+      title = "Epcam expression: Naive vs 14 dpi",
+      theme = theme(plot.title = element_text(size = 13, face = "bold"))
+    ),
+  width = 10, height = 5
+)
+
+
+# 11.  DIFFERENTIAL EXPRESSION ANALYSIS
+
+Idents(seurat_obj) <- seurat_obj$seurat_clusters
+
+# Cluster 5 and 6: positive markers vs all other clusters
+for (cl in c("5", "6")) {
+  markers <- FindMarkers(seurat_obj,
+    ident.1 = cl, only.pos = TRUE,
+    min.pct = 0.35, logfc.threshold = 0.5, test.use = "bimod"
+  )
+  markers$gene <- rownames(markers)
+  cat("\n── Cluster", cl, ": top 20 markers ──\n")
+  print(arrange(markers, desc(avg_log2FC)) %>% head(20))
+  write.csv(markers, paste0("DE_cluster", cl, "_markers.csv"), row.names = TRUE)
+  cat("\nSingleR labels for cluster", cl, ":\n")
+  print(table(seurat_obj$singler_label[seurat_obj$seurat_clusters == cl]))
+  assign(paste0("cluster", cl, "_markers"), markers)
+}
+
+# Top-4 marker violins per cluster across timepoints
+for (cl in c("5", "6")) {
+  top4 <- get(paste0("cluster", cl, "_markers")) %>%
+    arrange(desc(avg_log2FC)) %>%
+    head(4) %>%
+    pull(gene)
+  ggsave(paste0("violin_cluster", cl, "_timepoints.pdf"),
+    VlnPlot(subset(seurat_obj, subset = seurat_clusters == cl),
+      features = top4, ncol = 2, pt.size = 0, group.by = "timepoint"
+    ) +
+      plot_annotation(title = paste("Cluster", cl, "— top marker expression across timepoints")),
+    width = 10, height = 8
+  )
+}
+
+# Cluster 5 (Neutrophils): Naive vs D14
+# Cluster 6 (NKT): Naive vs D05
+cl_timepoints <- list("5" = c("Naive", "D14"), "6" = c("Naive", "D05"))
+
+for (cl in c("5", "6")) {
+  tps <- cl_timepoints[[cl]]
+  sub <- subset(seurat_obj, subset = seurat_clusters == cl & timepoint %in% tps)
+  sub$timepoint <- droplevels(sub$timepoint)
+  Idents(sub) <- "timepoint"
+
+  de <- FindMarkers(sub,
+    ident.1 = tps[2], ident.2 = tps[1],
+    test.use = "wilcox", min.pct = 0.15, logfc.threshold = 0.20
+  )
+  de$gene <- rownames(de)
+  write.csv(de, paste0("DE_cluster", cl, "_", tps[2], "vsNaive.csv"), row.names = TRUE)
+
+  cat("\n── Cluster", cl, ":", tps[2], "vs Naive — top hits ──\n")
+  print(arrange(de, desc(avg_log2FC)) %>% head(20))
+
+  assign(paste0("cluster", cl, "_de_timepoint"), de)
+}
+
+
+# FindAllMarkers for heatmap of top 5 genes per cluster
+all_cluster_markers <- FindAllMarkers(seurat_obj,
+  only.pos = TRUE,
+  min.pct = 0.35, logfc.threshold = 0.5, test.use = "bimod"
+)
+write.csv(all_cluster_markers, "DE_all_cluster_markers.csv", row.names = TRUE)
+
+top5_per_cluster <- all_cluster_markers %>%
+  filter(p_val_adj < 0.05) %>%
+  group_by(cluster) %>%
+  slice_max(order_by = avg_log2FC, n = 5) %>%
+  ungroup()
+
+ggsave("heatmap_top5_per_cluster.pdf",
+  DoHeatmap(seurat_obj,
+    features = top5_per_cluster$gene,
+    group.by = "seurat_clusters", angle = 0, size = 3
+  ) +
+    scale_fill_gradientn(colours = c("#2166AC", "white", "#D73027"), na.value = "white") +
+    theme(axis.text.y = element_text(size = 5), legend.text = element_text(size = 8)) +
+    ggtitle("Top 5 marker genes per cluster"),
+  width = 16, height = 12
+)
+
+# RM NK cells + Macrophages: D08 vs Naive
+# Note: pseudobulk DESeq2 not possible due to insufficient sample replicates per group
+# Wilcoxon test used instead — acknowledged as limitation in methods
+rm_innate <- subset(rm_obj,
+  subset = singler_label %in% c("NK cells", "Macrophages") &
+    timepoint %in% c("Naive", "D08")
+)
+rm_innate$timepoint <- droplevels(rm_innate$timepoint)
+
+cat("\nInnate cells for DE (RM, Naive vs D08):", ncol(rm_innate), "\n")
+print(table(rm_innate$singler_label, rm_innate$timepoint))
+
+Idents(rm_innate) <- "timepoint"
+
+de_innate_8dpi <- FindMarkers(
+  rm_innate,
+  ident.1         = "D08",
+  ident.2         = "Naive",
+  test.use        = "wilcox",
+  min.pct         = 0.15,
+  logfc.threshold = 0.20
+)
+
+write.csv(de_innate_8dpi, "DE_innate_D08vsNaive.csv", row.names = TRUE)
+
+de_innate_8dpi <- de_innate_8dpi %>%
+  mutate(
+    gene = rownames(.),
+    sig = p_val_adj < 0.05,
+    direction = ifelse(avg_log2FC > 0, "Up (D08)", "Down (D08)"),
+    label = ifelse(gene %in% c(
+      "Nkg7", "Gzmb", "Prf1", "Ifng", "C1qa",
+      "Cxcl9", "Cxcl10", "Il6", "Tnf",
+      "Ifit1", "Isg15", "Mx1"
+    ), gene, NA)
+  )
+ggsave("volcano_innate_D08vsNaive.pdf",
+  ggplot(
+    de_innate_8dpi,
+    aes(avg_log2FC, -log10(p_val_adj),
+      colour = interaction(sig, direction), label = label
+    )
+  ) +
+    geom_point(alpha = 0.6, size = 1.2) +
+    geom_text_repel(
+      size = 3, max.overlaps = 20, na.rm = TRUE,
+      fontface = "italic", colour = "black"
+    ) +
+    scale_colour_manual(name = "", values = c(
+      "FALSE.Down (D08)" = "grey70", "FALSE.Up (D08)" = "grey70",
+      "TRUE.Down (D08)" = "#2166AC", "TRUE.Up (D08)" = "#D73027"
+    )) +
+    geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed", colour = "grey40") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "grey40") +
+    labs(
+      title = "DE: NK + Macrophage cells — D08 vs Naive (RM)",
+      subtitle = "Wilcoxon | Highlighted: cytotoxic and myeloid activation genes",
+      x = "Average log2 fold-change", y = "-log10 adjusted p-value"
+    ) +
+    theme_classic(base_size = 12) +
+    theme(legend.position = "top"),
+  width = 9, height = 7
+)
+
+
+# 12.  GSEA/ORA
+
+# Ranked gene list for innate DE
+gene_list_innate <- de_innate_8dpi %>%
+  filter(!is.na(avg_log2FC)) %>%
+  arrange(desc(avg_log2FC)) %>%
+  {
+    setNames(.$avg_log2FC, .$gene)
+  }
+
+# GSEA — Hallmark
+gsea_hallmark <- GSEA(gene_list_innate,
+  verbose = TRUE, pvalueCutoff = 0.05,
+  TERM2GENE = msigdbr(species = "Mus musculus", category = "H") %>%
+    dplyr::select(gs_name, gene_symbol)
+)
+
+ggsave("GSEA_Hallmark_innate_D08.pdf",
+  dotplot(gsea_hallmark, showCategory = 15, split = ".sign") +
+    facet_grid(. ~ .sign) +
+    ggtitle("GSEA – MSigDB Hallmark\nRM NK + Macrophage: D08 vs Naive") +
+    theme(axis.text.y = element_text(size = 8)),
+  width = 14, height = 8
+)
+
+ggsave("GSEA_Hallmark_ridgeplot.pdf",
+  ridgeplot(gsea_hallmark, showCategory = 15, fill = "p.adjust") +
+    labs(
+      title    = "GSEA – MSigDB Hallmark\nRM NK + Macrophage: D08 vs Naive",
+      x        = "Enrichment distribution",
+      fill     = "Adjusted p-value"
+    ) +
+    theme_classic(base_size = 11) +
+    theme(axis.text.y = element_text(size = 9, lineheight = 0.9)),
+  width = 12, height = 8
+)
+
+# GSEA — C7 Immunological
+gsea_immuno <- GSEA(gene_list_innate,
+  verbose = TRUE, pvalueCutoff = 0.05,
+  TERM2GENE = msigdbr(species = "Mus musculus", category = "C7") %>%
+    dplyr::select(gs_name, gene_symbol)
+)
+
+ggsave("GSEA_C7_innate_D08.pdf",
+  dotplot(gsea_immuno, showCategory = 10, split = ".sign") +
+    facet_grid(. ~ .sign) +
+    ggtitle("GSEA – C7 Immunological\nRM NK + Macrophage: D08 vs Naive") +
+    theme(
+      axis.text.y = element_text(size = 7),
+      strip.text  = element_text(size = 10)
+    ) +
+    scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 40)),
+  width = 16, height = 8
+)
+
+# ORA GO BP — helper function to avoid repetition
+run_ora <- function(markers, label) {
+  up <- markers %>%
+    filter(avg_log2FC > 0.5, p_val_adj < 0.05) %>%
+    pull(gene)
+  bg <- rownames(seurat_obj)
+  g <- bitr(up, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  b <- bitr(bg, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ora <- enrichGO(
+    gene = g$ENTREZID, universe = b$ENTREZID, OrgDb = org.Mm.eg.db,
+    ont = "BP", pAdjustMethod = "BH", pvalueCutoff = 0.05, qvalueCutoff = 0.2,
+    readable = TRUE
+  )
+  if (nrow(ora) > 0) {
+    ggsave(paste0("ORA_GO_BP_", label, ".pdf"),
+      dotplot(ora, showCategory = 20, font.size = 9) +
+        ggtitle(paste("ORA – GO Biological Process\n", label, "upregulated markers")) +
+        theme(axis.text.y = element_text(size = 8)),
+      width = 10, height = 8
+    )
+  } else {
+    cat("No significant ORA terms for", label, "\n")
+  }
+}
+
+run_ora(cluster5_markers, "cluster5")
+run_ora(cluster6_markers, "cluster6")
+
+for (cl in c("5", "6")) {
+  de <- get(paste0("cluster", cl, "_de_timepoint"))
+  gene_list <- de %>%
+    filter(!is.na(avg_log2FC)) %>%
+    arrange(desc(avg_log2FC)) %>%
+    {
+      setNames(.$avg_log2FC, .$gene)
+    }
+
+  gsea_res <- GSEA(gene_list,
+    verbose = FALSE, pvalueCutoff = 0.05,
+    TERM2GENE = msigdbr(species = "Mus musculus", category = "H") %>%
+      dplyr::select(gs_name, gene_symbol)
+  )
+
+  if (nrow(gsea_res) > 0) {
+    ggsave(paste0("GSEA_Hallmark_cluster", cl, ".pdf"),
+      dotplot(gsea_res, showCategory = 15, split = ".sign") +
+        facet_grid(. ~ .sign) +
+        ggtitle(paste("GSEA Hallmark – Cluster", cl)) +
+        theme(axis.text.y = element_text(size = 8)),
+      width = 14, height = 8
+    )
+  } else {
+    cat("No significant GSEA terms for cluster", cl, "\n")
+  }
+}
+
+
+# 13.  CELL COMPOSITION ANALYSIS
+
+# RM cell-type composition across timepoints
+ggsave("composition_bar_RM_timepoint.pdf",
+  seurat_obj@meta.data %>%
+    filter(organ_custom == "RM", !is.na(singler_pruned)) %>%
+    count(timepoint, singler_pruned) %>%
+    group_by(timepoint) %>% mutate(fraction = n / sum(n)) %>% ungroup() %>%
+    ggplot(aes(timepoint, fraction, fill = singler_pruned)) +
+    geom_bar(stat = "identity", position = "stack", colour = "white", linewidth = 0.2) +
+    labs(
+      title = "Cell-type composition of RM across primary infection",
+      x = "Timepoint", y = "Fraction of RM cells", fill = "Cell type"
+    ) +
+    theme_classic(base_size = 11) +
+    theme(
+      legend.text = element_text(size = 8),
+      axis.text.x = element_text(angle = 30, hjust = 1)
+    ),
+  width = 10, height = 6
+)
+
+# Krt13 mean expression kinetics in RM as KNIIFE proxy
+rm_expr <- GetAssayData(subset(seurat_obj, subset = organ_custom == "RM"),
+  assay = "RNA", layer = "data"
+)["Krt13", ]
+
+krt13_tp <- seurat_obj@meta.data %>%
+  filter(organ_custom == "RM") %>%
+  mutate(Krt13 = FetchData(seurat_obj, vars = "Krt13")[rownames(.), 1]) %>%
+  group_by(timepoint) %>%
+  summarise(mean_Krt13 = mean(Krt13), .groups = "drop")
+
+ggsave("composition_kinetics_KNIIFE_RM.pdf",
+  ggplot(krt13_tp, aes(timepoint, mean_Krt13, group = 1)) +
+    geom_line(linewidth = 1.2, colour = "#FF7F00") +
+    geom_point(size = 3, colour = "#FF7F00") +
+    labs(
+      title = "Krt13 mean expression across IAV infection (RM)",
+      x = "Timepoint", y = "Mean log-normalised Krt13 expression"
+    ) +
+    theme_classic(base_size = 12),
+  width = 9, height = 5
+)
+
+# Cross-tissue composition at D08
+ggsave("composition_bar_tissue_D08.pdf",
+  seurat_obj@meta.data %>%
+    filter(timepoint == "D08", !is.na(singler_pruned)) %>%
+    count(organ_custom, singler_pruned) %>%
+    group_by(organ_custom) %>% mutate(fraction = n / sum(n)) %>% ungroup() %>%
+    ggplot(aes(organ_custom, fraction, fill = singler_pruned)) +
+    geom_bar(stat = "identity", position = "stack", colour = "white", linewidth = 0.2) +
+    labs(
+      title = "Cell-type composition by tissue at D08",
+      x = "Tissue", y = "Fraction of cells", fill = "Cell type"
+    ) +
+    theme_classic(base_size = 11) +
+    theme(legend.text = element_text(size = 8)),
+  width = 8, height = 6
+)
