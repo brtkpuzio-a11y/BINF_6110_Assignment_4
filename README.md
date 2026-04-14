@@ -1,4 +1,4 @@
-# BINF_6110_Assignment_4
+# Cellular Dynamics of the Murine Nasal Mucosa During Primary Influenza A Virus Infection: A Single-Cell Analysis
 ## Introduction
 
 Influenza A virus (IAV) is a negative-sense, single-stranded RNA virus of the family Orthomyxoviridae and a leading cause of acute respiratory illness, responsible for an estimated 290,000-650,000 deaths annually [1]. The nasal mucosa is the primary site of IAV entry and initial immune sensing. The murine nasal cavity comprises three anatomically and functionally distinct regions: the olfactory mucosa (OM), the respiratory mucosa (RM), and the lung-proximal nasal tissue (LNG), each containing unique epithelial and immune cell populations. Characterising how these compartments respond to infection across time is important for understanding mucosal antiviral defence and the establishment of long-lived respiratory immune memory.
